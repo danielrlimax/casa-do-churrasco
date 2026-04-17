@@ -133,7 +133,7 @@ export default function Admin() {
           <h1 className="text-3xl font-black tracking-tighter italic">
             Painel Admin - Casa do Churrasco
           </h1>
-          <p className="text-white/40 text-sm">Controlo de stock e produtos</p>
+          <p className="text-white/40 text-sm">Controle de estoque e produtos</p>
         </div>
         
         <div className="flex flex-wrap sm:flex-nowrap gap-3 w-full md:w-auto">
@@ -216,7 +216,7 @@ export default function Admin() {
                     onChange={e => setEditingItem({...editingItem, categoria: e.target.value})}
                   >
                     <option value="burgers" className="bg-[#141414]">🍔 Burgers</option>
-                    <option value="entradas" className="bg-[#141414]">🥗 Entradas</option>
+                    <option value="principal" className="bg-[#141414]">🥗 principal</option>
                     <option value="pratos" className="bg-[#141414]">🍝 Pratos</option>
                     <option value="sobremesas" className="bg-[#141414]">🍰 Sobremesas</option>
                     <option value="bebidas" className="bg-[#141414]">🥤 Bebidas</option>
