@@ -15,7 +15,7 @@ import Admin from "./components/Admin";
 
 
 export default function App() {
-  const isAdminPath = window.location.pathname === "/admin";
+  const isAdminPath = window.location.pathname === "/adminii";
 
   if (isAdminPath) {
     return <Admin />;
