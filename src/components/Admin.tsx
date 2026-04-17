@@ -125,16 +125,26 @@ export default function Admin() {
       <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-10">
         <div>
           <h1 className="text-3xl font-black tracking-tighter italic">
-            Admin - Casa do Churrasco
+            Painel Admin - Casa do Churrasco
           </h1>
-          <p className="text-white/40 text-sm">Controle de stock e produtos</p>
+          <p className="text-white/40 text-sm">Controle de estoque e produtos</p>
         </div>
-        <button 
-          onClick={() => setEditingItem({ nome: "", preco: 0, categoria: "burgers", disponivel: true, destaque: false, imagem: "", descricao: "" })}
-          className="w-full sm:w-auto bg-white text-black px-8 py-4 rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl"
-        >
-          + Novo Item
-        </button>
+        
+        {/* Container flex para agrupar os botões */}
+        <div className="flex gap-3 w-full sm:w-auto">
+          <a 
+            href="/" 
+            className="flex-1 sm:flex-none flex items-center justify-center bg-white/5 text-white px-6 py-4 rounded-2xl text-xs font-black uppercase tracking-widest border border-white/10 hover:bg-white/10 transition-all"
+          >
+            Voltar
+          </a>
+          <button 
+            onClick={() => setEditingItem({ nome: "", preco: 0, categoria: "burgers", disponivel: true, destaque: false, imagem: "", descricao: "" })}
+            className="flex-1 sm:flex-none bg-white text-black px-6 py-4 rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl hover:bg-gray-200 transition-all"
+          >
+            + Novo Item
+          </button>
+        </div>
       </header>
 
         {loading ? (
