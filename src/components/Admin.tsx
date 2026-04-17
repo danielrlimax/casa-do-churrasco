@@ -10,7 +10,7 @@ export default function Admin() {
   const [loading, setLoading] = useState(true);
   const [editingItem, setEditingItem] = useState<Partial<MenuItem> | null>(null);
 
-  // Efeito 1: Gerenciamento da Sessão
+  // Efeito: Gerenciamento da Sessão
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -24,42 +24,6 @@ export default function Admin() {
 
     return () => subscription.unsubscribe();
   }, []);
-
-  // Efeito 2: Desconectar por Inatividade (1 hora)
-  useEffect(() => {
-    let timeoutId: NodeJS.Timeout;
-
-    // Função que reseta o cronômetro sempre que houver atividade
-    const resetTimer = () => {
-      clearTimeout(timeoutId);
-      // 1 hora em milissegundos = 60 * 60 * 1000 = 3600000
-      timeoutId = setTimeout(() => {
-        handleLogout();
-      }, 3600000); 
-    };
-
-    if (session) {
-      // Começa a contar quando o usuário loga
-      resetTimer();
-      
-      // Fica escutando qualquer interação do usuário com a página
-      window.addEventListener("mousemove", resetTimer);
-      window.addEventListener("mousedown", resetTimer);
-      window.addEventListener("keydown", resetTimer);
-      window.addEventListener("scroll", resetTimer);
-      window.addEventListener("touchstart", resetTimer);
-    }
-
-    // Limpeza dos eventos para não pesar o navegador
-    return () => {
-      clearTimeout(timeoutId);
-      window.removeEventListener("mousemove", resetTimer);
-      window.removeEventListener("mousedown", resetTimer);
-      window.removeEventListener("keydown", resetTimer);
-      window.removeEventListener("scroll", resetTimer);
-      window.removeEventListener("touchstart", resetTimer);
-    };
-  }, [session]);
 
   async function fetchItems() {
     setLoading(true);
@@ -84,8 +48,10 @@ export default function Admin() {
     if (error) alert("Erro no login: " + error.message);
   }
 
+  // Função de Logout com Redirecionamento para a Home
   async function handleLogout() {
     await supabase.auth.signOut();
+    window.location.href = "/"; // Envia de volta para a página inicial
   }
 
   async function handleSave(e: React.FormEvent) {
@@ -121,7 +87,6 @@ export default function Admin() {
     }
   }
 
-  // Estilos de Scrollbar Customizada via Injeção de CSS
   const scrollbarStyles = `
     .custom-scroll::-webkit-scrollbar { width: 6px; }
     .custom-scroll::-webkit-scrollbar-track { background: transparent; }
@@ -168,10 +133,9 @@ export default function Admin() {
           <h1 className="text-3xl font-black tracking-tighter italic">
             Painel Admin - Casa do Churrasco
           </h1>
-          <p className="text-white/40 text-sm">Controle de estoque e produtos</p>
+          <p className="text-white/40 text-sm">Controlo de stock e produtos</p>
         </div>
         
-        {/* Container flex com flex-wrap para ajustar os 3 botões no celular */}
         <div className="flex flex-wrap sm:flex-nowrap gap-3 w-full md:w-auto">
           <button
             onClick={handleLogout}
@@ -222,7 +186,7 @@ export default function Admin() {
         )}
       </div>
 
-      {/* Modal de Edição 100% Responsivo */}
+      {/* Modal de Edição */}
       {editingItem && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
           <form 
