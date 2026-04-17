@@ -216,7 +216,7 @@ export default function Admin() {
                     onChange={e => setEditingItem({...editingItem, categoria: e.target.value})}
                   >
                     <option value="burgers" className="bg-[#141414]">🍔 Burgers</option>
-                    <option value="principal" className="bg-[#141414]">🥗 principal</option>
+                    <option value="principal" className="bg-[#141414]">🥗 Principal</option>
                     <option value="pratos" className="bg-[#141414]">🍝 Pratos</option>
                     <option value="sobremesas" className="bg-[#141414]">🍰 Sobremesas</option>
                     <option value="bebidas" className="bg-[#141414]">🥤 Bebidas</option>
