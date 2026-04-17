@@ -28,7 +28,7 @@ export const RESTAURANTE = {
 
 export const CATEGORIAS: Categoria[] = [
   { id: "todos", nome: "Todos", emoji: "🍽️" },
-  { id: "entradas", nome: "Entradas", emoji: "🥗" },
+  { id: "principal", nome: "Principal", emoji: "🥗" },
   { id: "burgers", nome: "Burgers", emoji: "🍔" },
   { id: "pratos", nome: "Pratos", emoji: "🍝" },
   { id: "sobremesas", nome: "Doces", emoji: "🍰" },
