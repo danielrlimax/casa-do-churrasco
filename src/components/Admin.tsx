@@ -10,6 +10,7 @@ export default function Admin() {
   const [loading, setLoading] = useState(true);
   const [editingItem, setEditingItem] = useState<Partial<MenuItem> | null>(null);
 
+  // Efeito 1: Gerenciamento da Sessão
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -23,6 +24,42 @@ export default function Admin() {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // Efeito 2: Desconectar por Inatividade (1 hora)
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+
+    // Função que reseta o cronômetro sempre que houver atividade
+    const resetTimer = () => {
+      clearTimeout(timeoutId);
+      // 1 hora em milissegundos = 60 * 60 * 1000 = 3600000
+      timeoutId = setTimeout(() => {
+        handleLogout();
+      }, 3600000); 
+    };
+
+    if (session) {
+      // Começa a contar quando o usuário loga
+      resetTimer();
+      
+      // Fica escutando qualquer interação do usuário com a página
+      window.addEventListener("mousemove", resetTimer);
+      window.addEventListener("mousedown", resetTimer);
+      window.addEventListener("keydown", resetTimer);
+      window.addEventListener("scroll", resetTimer);
+      window.addEventListener("touchstart", resetTimer);
+    }
+
+    // Limpeza dos eventos para não pesar o navegador
+    return () => {
+      clearTimeout(timeoutId);
+      window.removeEventListener("mousemove", resetTimer);
+      window.removeEventListener("mousedown", resetTimer);
+      window.removeEventListener("keydown", resetTimer);
+      window.removeEventListener("scroll", resetTimer);
+      window.removeEventListener("touchstart", resetTimer);
+    };
+  }, [session]);
 
   async function fetchItems() {
     setLoading(true);
@@ -45,6 +82,10 @@ export default function Admin() {
     e.preventDefault();
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) alert("Erro no login: " + error.message);
+  }
+
+  async function handleLogout() {
+    await supabase.auth.signOut();
   }
 
   async function handleSave(e: React.FormEvent) {
@@ -122,7 +163,7 @@ export default function Admin() {
       <style>{scrollbarStyles}</style>
       <div className="max-w-4xl mx-auto">
 
-      <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-10">
+      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-10">
         <div>
           <h1 className="text-3xl font-black tracking-tighter italic">
             Painel Admin - Casa do Churrasco
@@ -130,17 +171,25 @@ export default function Admin() {
           <p className="text-white/40 text-sm">Controle de estoque e produtos</p>
         </div>
         
-        {/* Container flex para agrupar os botões */}
-        <div className="flex gap-3 w-full sm:w-auto">
+        {/* Container flex com flex-wrap para ajustar os 3 botões no celular */}
+        <div className="flex flex-wrap sm:flex-nowrap gap-3 w-full md:w-auto">
+          <button
+            onClick={handleLogout}
+            className="flex-1 sm:flex-none flex items-center justify-center bg-red-500/10 text-red-500 px-4 py-4 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-red-500/20 transition-all"
+          >
+            Sair
+          </button>
+          
           <a 
             href="/" 
-            className="flex-1 sm:flex-none flex items-center justify-center bg-white/5 text-white px-6 py-4 rounded-2xl text-xs font-black uppercase tracking-widest border border-white/10 hover:bg-white/10 transition-all"
+            className="flex-1 sm:flex-none flex items-center justify-center bg-white/5 text-white px-4 sm:px-6 py-4 rounded-2xl text-xs font-black uppercase tracking-widest border border-white/10 hover:bg-white/10 transition-all"
           >
             Voltar
           </a>
+          
           <button 
             onClick={() => setEditingItem({ nome: "", preco: 0, categoria: "burgers", disponivel: true, destaque: false, imagem: "", descricao: "" })}
-            className="flex-1 sm:flex-none bg-white text-black px-6 py-4 rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl hover:bg-gray-200 transition-all"
+            className="w-full sm:w-auto sm:flex-none bg-white text-black px-6 py-4 rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl hover:bg-gray-200 transition-all"
           >
             + Novo Item
           </button>
