@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { MenuItem, Categoria } from "./data/menu"; // Mantemos as interfaces
+import { MenuItem, Categoria, CATEGORIAS, SecaoItem } from "./data/menu";
 import { supabase } from "./lib/supabase";
 import Header from "./components/Header";
 import Hero from "./components/Hero";
@@ -9,10 +9,7 @@ import MenuCard from "./components/MenuCard";
 import ItemModal from "./components/ItemModal";
 import CartDrawer, { CartItem } from "./components/CartDrawer";
 import Footer from "./components/Footer";
-
 import Admin from "./components/Admin";
-
-
 
 export default function App() {
   const isAdminPath = window.location.pathname === "/admin";
@@ -20,47 +17,38 @@ export default function App() {
   if (isAdminPath) {
     return <Admin />;
   }
-  // ── State ──────────────────────────────────────────────────
+
   const [menu, setMenu] = useState<MenuItem[]>([]);
-  const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  
   const [selectedCategory, setSelectedCategory] = useState("todos");
   const [searchQuery, setSearchQuery] = useState("");
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
 
-  // ── Fetch Data ─────────────────────────────────────────────
   useEffect(() => {
     async function fetchData() {
       setIsLoading(true);
       try {
-        // Busca Categorias
-        const { data: catData } = await supabase
-          .from('categorias')
-          .select('*')
-          .order('nome');
-        
-        // Busca Itens do Menu (renomeando categoria_id para categoria para manter compatibilidade)
         const { data: menuData } = await supabase
           .from('menu_items')
-          .select('*');
+          .select('*')
+          .order('nome', { ascending: true });
 
-        if (catData) {
-          setCategorias([{ id: "todos", nome: "Todos", emoji: "🍽️" }, ...catData]);
-        }
-        
         if (menuData) {
-          // Mapeamos o campo do banco 'categoria_id' para o 'categoria' que o front espera
-          const formattedMenu = menuData.map((item: any) => ({
+          const formatted = menuData.map((item: any) => ({
             ...item,
-            categoria: item.categoria_id
+            categoria: item.categoria_id || item.categoria,
+            secoes: item.secoes || []
           }));
-          setMenu(formattedMenu);
+          
+          // Ordenação natural (faz o 2 vir antes do 10)
+          formatted.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR', { numeric: true }));
+
+          setMenu(formatted);
         }
       } catch (error) {
-        console.error("Erro ao carregar dados:", error);
+        console.error("Erro ao buscar cardápio:", error);
       } finally {
         setIsLoading(false);
       }
@@ -69,151 +57,105 @@ export default function App() {
     fetchData();
   }, []);
 
-  // ── Cart helpers ───────────────────────────────────────────
-  const addToCart = (item: MenuItem) => {
-    setCartItems((prev) => {
-      const existing = prev.find((ci) => ci.item.id === item.id);
-      if (existing) {
-        return prev.map((ci) =>
-          ci.item.id === item.id ? { ...ci, quantity: ci.quantity + 1 } : ci
-        );
-      }
-      return [...prev, { item, quantity: 1 }];
-    });
+  const handleAddToCart = (item: MenuItem, selecoes: Record<string, SecaoItem[]>, observacoes: string, qty: number) => {
+    const newItem: CartItem = {
+      id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
+      item,
+      quantity: qty,
+      selecoes,
+      observacoes,
+      precoUnitario: item.preco
+    };
+    setCartItems((prev) => [...prev, newItem]);
   };
 
-  const removeFromCart = (item: MenuItem) => {
-    setCartItems((prev) => {
-      const existing = prev.find((ci) => ci.item.id === item.id);
-      if (!existing) return prev;
-      if (existing.quantity === 1) return prev.filter((ci) => ci.item.id !== item.id);
-      return prev.map((ci) =>
-        ci.item.id === item.id ? { ...ci, quantity: ci.quantity - 1 } : ci
-      );
-    });
+  const handleRemoveFromCart = (id: string) => {
+    setCartItems((prev) => prev.filter((i) => i.id !== id));
   };
 
-  const clearCart = () => setCartItems([]);
+  const getQuantityTotal = (itemId: string) => {
+    return cartItems.filter((i) => i.item.id === itemId).reduce((acc, curr) => acc + curr.quantity, 0);
+  };
 
-  const getQuantity = (itemId: string) =>
-    cartItems.find((ci) => ci.item.id === itemId)?.quantity ?? 0;
-
-  const cartCount = cartItems.reduce((acc, ci) => acc + ci.quantity, 0);
-
-  // ── Filtered menu ──────────────────────────────────────────
   const filteredItems = useMemo(() => {
-    let items = menu;
-
-    if (selectedCategory !== "todos") {
-      items = items.filter((i) => i.categoria === selectedCategory);
-    }
-
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      items = items.filter(
-        (i) =>
-          i.nome.toLowerCase().includes(q) ||
-          i.descricao.toLowerCase().includes(q) ||
-          i.categoria.toLowerCase().includes(q) ||
-          (i.tag?.toLowerCase().includes(q) ?? false)
-      );
-    }
-
-    return items;
-  }, [selectedCategory, searchQuery, menu]);
-
-  // ── Grouped by category ─────────────────
-  const groupedItems = useMemo(() => {
-    if (selectedCategory !== "todos" || searchQuery.trim()) {
-      return null;
-    }
-    const groups: { cat: Categoria; items: MenuItem[] }[] = [];
-    categorias.filter((c) => c.id !== "todos").forEach((cat) => {
-      const items = menu.filter((i) => i.categoria === cat.id);
-      if (items.length > 0) groups.push({ cat, items });
+    return menu.filter((item) => {
+      const matchesCategory = selectedCategory === "todos" || item.categoria === selectedCategory;
+      const matchesSearch =
+        item.nome.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.descricao.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchesCategory && matchesSearch;
     });
-    return groups;
-  }, [selectedCategory, searchQuery, menu, categorias]);
+  }, [menu, selectedCategory, searchQuery]);
 
-  // ── Highlights ─────────────────────────────────
-  const highlights = useMemo(
-    () => menu.filter((i) => i.destaque && i.disponivel),
-    [menu]
-  );
+  // Filtra itens em destaque
+  const highlightedItems = useMemo(() => {
+    return menu.filter(item => item.destaque && item.disponivel);
+  }, [menu]);
+
+  const groupedItems = useMemo(() => {
+    if (searchQuery.trim() || selectedCategory !== "todos") return null;
+
+    const groups: Record<string, MenuItem[]> = {};
+    CATEGORIAS.forEach((cat: Categoria) => {
+      if (cat.id !== "todos") groups[cat.id] = [];
+    });
+
+    menu.forEach((item) => {
+      if (groups[item.categoria]) {
+        groups[item.categoria].push(item);
+      }
+    });
+
+    return groups;
+  }, [menu, selectedCategory, searchQuery]);
 
   return (
-    <div className="min-h-screen bg-[#111] text-white">
-      <Header cartCount={cartCount} onCartClick={() => setCartOpen(true)} />
+    <div className="min-h-screen bg-[#0a0a0a] font-sans selection:bg-[#e8a838] selection:text-black">
+      <Header cartCount={cartItems.reduce((acc, item) => acc + item.quantity, 0)} onCartClick={() => setCartOpen(true)} />
       <Hero />
+      <CategoryFilter selected={selectedCategory} onChange={setSelectedCategory} />
       
-      <CategoryFilter 
-        selected={selectedCategory} 
-        onChange={setSelectedCategory} 
-      />
-      
-      <SearchBar value={searchQuery} onChange={setSearchQuery} />
+      <main className="max-w-4xl mx-auto pb-24 px-4 sm:px-6">
+        <SearchBar value={searchQuery} onChange={setSearchQuery} />
 
-      <main className="max-w-4xl mx-auto px-4 pb-8">
         {isLoading ? (
-          <div className="flex justify-center py-20">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-yellow-400"></div>
+          <div className="flex justify-center items-center py-20">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#e8a838]"></div>
           </div>
         ) : (
           <>
-            {/* ── Destaques ── */}
-            {selectedCategory === "todos" && !searchQuery && highlights.length > 0 && (
-              <section className="mt-6 mb-8">
-                <div className="flex items-center gap-2 mb-4">
-                  <span className="text-yellow-400 text-lg">⭐</span>
-                  <h2 className="text-white font-extrabold text-lg">Destaques da Casa</h2>
-                </div>
-                <div className="flex gap-4 overflow-x-auto pb-2" style={{ scrollbarWidth: "none" }}>
-                  {highlights.map((item) => (
-                    <div key={item.id} className="flex-shrink-0 w-56">
-                      <MenuCard
-                        item={item}
-                        quantity={getQuantity(item.id)}
-                        onAdd={addToCart}
-                        onRemove={removeFromCart}
-                        onClick={setSelectedItem}
-                      />
+            {/* Visualização Agrupada (Padrão do Cardápio) */}
+            {groupedItems && !searchQuery.trim() && selectedCategory === "todos" && (
+              <div className="mt-6 space-y-10">
+                
+                {/* DESTAQUES NO ESTILO CARROSSEL HORIZONTAL */}
+                {highlightedItems.length > 0 && (
+                  <section>
+                    <h2 className="text-[#e8a838] font-black text-2xl italic uppercase tracking-tighter mb-4 flex items-center gap-2">
+                      ⭐ Destaques da Casa
+                    </h2>
+                    {/* Container flexível com rolagem lateral e ocultando a barra de rolagem */}
+                    <div 
+                      className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide snap-x snap-mandatory" 
+                      style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+                    >
+                      {highlightedItems.map((item) => (
+                        // Card menor (280px) em linha
+                        <div key={`highlight-${item.id}`} className="shrink-0 w-[280px] snap-start">
+                          <MenuCard item={item} quantity={getQuantityTotal(item.id)} onClick={setSelectedItem} />
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              </section>
-            )}
+                  </section>
+                )}
 
-            {/* ── Search result view ── */}
-            {searchQuery.trim() && (
-              <div className="mt-5 mb-3">
-                <p className="text-white/40 text-sm">
-                  {filteredItems.length === 0
-                    ? `Nenhum resultado para "${searchQuery}"`
-                    : `${filteredItems.length} resultado${filteredItems.length !== 1 ? "s" : ""} para "${searchQuery}"`}
-                </p>
-              </div>
-            )}
-
-            {/* ── GROUPED VIEW ── */}
-            {groupedItems && !searchQuery && (
-              <div className="space-y-10 mt-2">
-                {groupedItems.map(({ cat, items }) => (
+                {/* Categorias Normais (Lista Padrão) */}
+                {CATEGORIAS.filter((c) => c.id !== "todos" && groupedItems[c.id]?.length > 0).map((cat) => (
                   <section key={cat.id}>
-                    <div className="flex items-center gap-2 mb-4">
-                      <span className="text-2xl">{cat.emoji}</span>
-                      <h2 className="text-white font-extrabold text-lg">{cat.nome}</h2>
-                      <span className="text-white/20 text-sm ml-auto">{items.length} itens</span>
-                    </div>
+                    <h2 className="text-white font-black text-2xl italic uppercase tracking-tighter mb-4">{cat.nome}</h2>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {items.map((item) => (
-                        <MenuCard
-                          key={item.id}
-                          item={item}
-                          quantity={getQuantity(item.id)}
-                          onAdd={addToCart}
-                          onRemove={removeFromCart}
-                          onClick={setSelectedItem}
-                        />
+                      {groupedItems[cat.id].map((item) => (
+                        <MenuCard key={item.id} item={item} quantity={getQuantityTotal(item.id)} onClick={setSelectedItem} />
                       ))}
                     </div>
                   </section>
@@ -221,20 +163,9 @@ export default function App() {
               </div>
             )}
 
-            {/* ── FLAT VIEW ── */}
-            {(!groupedItems || searchQuery.trim()) && (
-              <div className="mt-4">
-                {!searchQuery && selectedCategory !== "todos" && (
-                  <div className="flex items-center gap-2 mb-4">
-                    <span className="text-2xl">
-                      {categorias.find((c) => c.id === selectedCategory)?.emoji}
-                    </span>
-                    <h2 className="text-white font-extrabold text-lg">
-                      {categorias.find((c) => c.id === selectedCategory)?.nome}
-                    </h2>
-                    <span className="text-white/20 text-sm ml-auto">{filteredItems.length} itens</span>
-                  </div>
-                )}
+            {/* Visualização por Busca ou Categoria Específica (Sem agrupar) */}
+            {(!groupedItems || searchQuery.trim() || selectedCategory !== "todos") && (
+              <div className="mt-6">
                 {filteredItems.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-20 text-center">
                     <span className="text-5xl mb-4">🔍</span>
@@ -244,14 +175,7 @@ export default function App() {
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {filteredItems.map((item) => (
-                      <MenuCard
-                        key={item.id}
-                        item={item}
-                        quantity={getQuantity(item.id)}
-                        onAdd={addToCart}
-                        onRemove={removeFromCart}
-                        onClick={setSelectedItem}
-                      />
+                      <MenuCard key={item.id} item={item} quantity={getQuantityTotal(item.id)} onClick={setSelectedItem} />
                     ))}
                   </div>
                 )}
@@ -263,21 +187,14 @@ export default function App() {
 
       <Footer />
 
-      <ItemModal
-        item={selectedItem}
-        quantity={getQuantity(selectedItem?.id ?? "")}
-        onClose={() => setSelectedItem(null)}
-        onAdd={addToCart}
-        onRemove={removeFromCart}
-      />
-
-      <CartDrawer
-        open={cartOpen}
-        cartItems={cartItems}
-        onClose={() => setCartOpen(false)}
-        onAdd={addToCart}
-        onRemove={removeFromCart}
-        onClear={clearCart}
+      <ItemModal item={selectedItem} onClose={() => setSelectedItem(null)} onAddToCart={handleAddToCart} />
+      
+      <CartDrawer 
+        open={cartOpen} 
+        cartItems={cartItems} 
+        onClose={() => setCartOpen(false)} 
+        onRemove={handleRemoveFromCart} 
+        onClear={() => setCartItems([])} 
       />
     </div>
   );

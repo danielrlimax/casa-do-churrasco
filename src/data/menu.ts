@@ -1,6 +1,25 @@
+export interface Categoria {
+  id: string;
+  nome: string;
+}
+
+export interface SecaoItem {
+  id: string;
+  nome: string;
+  valor: number;
+}
+
+export interface Secao {
+  id: string;
+  nome: string;
+  obrigatorio: boolean;
+  minimo: number;
+  maximo: number;
+  itens: SecaoItem[];
+}
+
 export interface MenuItem {
   id: string;
-  categoria: string;
   nome: string;
   descricao: string;
   preco: number;
@@ -8,29 +27,34 @@ export interface MenuItem {
   disponivel: boolean;
   destaque: boolean;
   tag?: string;
+  categoria: string;
+  secoes?: Secao[];
 }
-
-export interface Categoria {
-  id: string;
-  nome: string;
-  emoji: string;
-}
-
-export const RESTAURANTE = {
-  nome: "Casa do Churrasco", // Nome base da loja
-  slogan: "O melhor churrasco da região",
-  telefone: "(19) 99999-9999",
-  whatsapp: "5519999999999",
-  instagram: "@casadochurrasco",
-  horario: "Seg–Sáb: 18h às 23h",
-  cor: "#650016", // Cor principal (Vermelho)
-};
 
 export const CATEGORIAS: Categoria[] = [
-  { id: "todos", nome: "Todos", emoji: "🍽️" },
-  { id: "entradas", nome: "Entradas", emoji: "🥗" },
-  { id: "burgers", nome: "Burgers", emoji: "🍔" },
-  { id: "pratos", nome: "Pratos", emoji: "🍝" },
-  { id: "sobremesas", nome: "Doces", emoji: "🍰" },
-  { id: "bebidas", nome: "Bebidas", emoji: "🥤" },
+  { id: "todos", nome: "Todos" },
+  { id: "espetinho", nome: "Espetinho" },
+  { id: "rodizio", nome: "Rodízio" },
+  { id: "combos", nome: "Combos" },
+  { id: "marmitex", nome: "Marmitex" },
+  { id: "pizzas", nome: "Pizzas" },
+  { id: "fit", nome: "Fit" },
+  { id: "churrasco", nome: "Churrasco" },
+  { id: "massas", nome: "Massas" },
+  { id: "saladas", nome: "Saladas" },
+  { id: "acompanhamentos", nome: "Acompanhamentos" },
+  { id: "sobremesas", nome: "Sobremesas" },
+  { id: "bebidas", nome: "Bebidas" },
+  { id: "sucos", nome: "Sucos" },
+  { id: "doces", nome: "Doces" }
 ];
+
+export const RESTAURANTE = {
+  nome: "Casa do Churrasco",
+  slogan: "O melhor sabor da cidade",
+  cor: "#660e0e",
+  telefone: "(19) 98228-9132",
+  whatsapp: "5519982259132", // Apenas números
+  instagram: "@casadochurrascoo",
+  horario: "Seg-Sex: 11h às 15h, Sáb-Dom: 11h às 16h"
+};

@@ -2,6 +2,9 @@
 
 * {
   -webkit-tap-highlight-color: transparent;
+  /* Estilo de rolagem para Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: #333333 transparent;
 }
 
 html {
@@ -15,7 +18,40 @@ body {
   overscroll-behavior: none;
 }
 
-/* Hide scrollbar globally for overflow-x sliders */
+/* ==========================================
+   ESTILIZAÇÃO GLOBAL DA BARRA DE ROLAGEM 
+   (Chrome, Edge, Safari, Opera)
+========================================== */
+
+/* Largura da barra vertical e altura da horizontal */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+/* Fundo da barra (trilho) */
+::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 10px;
+}
+
+/* O "pegador" (thumb) da barra */
+::-webkit-scrollbar-thumb {
+  background: #333333;
+  border-radius: 10px;
+}
+
+/* Efeito ao passar o mouse ou clicar na barra (usando a cor do tema) */
+::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:active {
+  background: #e8a838;
+}
+
+/* ==========================================
+   UTILITIES (Utilitários personalizados)
+========================================== */
+
+/* Esconde a barra de rolagem (usado no filtro de categorias) */
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
@@ -24,12 +60,27 @@ body {
   scrollbar-width: none;
 }
 
-/* Smooth image loading */
+/* Classe específica caso queira forçar o estilo custom-scroll em algum container isolado */
+.custom-scroll::-webkit-scrollbar { 
+  width: 6px; 
+}
+.custom-scroll::-webkit-scrollbar-track { 
+  background: transparent; 
+}
+.custom-scroll::-webkit-scrollbar-thumb { 
+  background: #333; 
+  border-radius: 10px; 
+}
+.custom-scroll::-webkit-scrollbar-thumb:hover { 
+  background: #e8a838; 
+}
+
+/* Transição suave para carregamento de imagens */
 img {
   transition: opacity 0.2s ease;
 }
 
-/* Line clamp utility */
+/* Cortar texto com reticências após 2 linhas (usado na descrição dos itens) */
 .line-clamp-2 {
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -37,6 +88,7 @@ img {
   overflow: hidden;
 }
 
+/* Animações */
 @keyframes fade-in {
   from { opacity: 0; transform: translateY(-6px); }
   to   { opacity: 1; transform: translateY(0); }
