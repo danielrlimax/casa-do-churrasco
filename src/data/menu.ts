@@ -54,7 +54,7 @@ export const RESTAURANTE = {
   slogan: "O melhor sabor da cidade",
   cor: "#660e0e",
   telefone: "(19) 98228-9132",
-  whatsapp: "5519982259132", // Apenas números
+  whatsapp: "5519982289132", // Apenas números
   instagram: "@casadochurrascoo",
   horario: "Seg-Sex: 11h às 15h, Sáb-Dom: 11h às 16h"
 };
