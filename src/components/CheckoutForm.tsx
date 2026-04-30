@@ -132,7 +132,7 @@ export default function CheckoutForm({ onConfirm, totalItems }: CheckoutFormProp
       
       try {
         if (!storeCoords) {
-            const originData = await getCoordinates("13520000");
+            const originData = await getCoordinates("13521090");
             storeCoords = { lat: originData.lat, lon: originData.lon };
         }
 
