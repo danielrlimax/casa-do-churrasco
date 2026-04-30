@@ -23,6 +23,9 @@ interface CheckoutFormProps {
   totalItems: number;
 }
 
+// Variável global fora do componente para armazenar em cache a coordenada da loja (Centro: 13520-000)
+let storeCoords: { lat: number; lon: number } | null = null;
+
 export default function CheckoutForm({ onConfirm, totalItems }: CheckoutFormProps) {
   const [cep, setCep] = useState("");
   const [rua, setRua] = useState("");
@@ -33,76 +36,111 @@ export default function CheckoutForm({ onConfirm, totalItems }: CheckoutFormProp
   const [buscando, setBuscando] = useState(false);
   const [frete, setFrete] = useState<number>(0);
   const [distanciaKm, setDistanciaKm] = useState<number | null>(null);
+  const [foraDaZona, setForaDaZona] = useState<boolean>(false);
 
   const [metodoPagamento, setMetodoPagamento] = useState<"cartao" | "pix" | "dinheiro" | "">("");
   const [tipoCartao, setTipoCartao] = useState<"credito" | "debito" | "">("");
   const [trocoPara, setTrocoPara] = useState("");
 
-  // Coordenadas fixas do CEP de Saída: 13520-000 (São Pedro - SP)
-  const ORIGEM = { lat: -22.5485, lon: -47.9144 };
+  const formatCurrency = (val: number) => 
+    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
 
-  const calcularDistanciaHaversine = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-    const R = 6371; // Raio da Terra em KM
-    const dLat = (lat2 - lat1) * (Math.PI / 180);
-    const dLon = (lon2 - lon1) * (Math.PI / 180);
-    const a = 
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
+  // ==========================================
+  // LÓGICA DE GEOLOCALIZAÇÃO
+  // ==========================================
+  const getCoordinates = async (cepBusca: string) => {
+    const resViaCep = await fetch(`https://viacep.com.br/ws/${cepBusca}/json/`);
+    const dataCep = await resViaCep.json();
+    
+    if (dataCep.erro) throw new Error("CEP não encontrado");
+
+    // TENTATIVA 1: Busca pela Rua, Cidade, Estado
+    let query = `${dataCep.logradouro}, ${dataCep.localidade}, ${dataCep.uf}`;
+    let resGeo = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`);
+    let dataGeo = await resGeo.json();
+    
+    // TENTATIVA 2: Busca por Bairro, Cidade, Estado (Fallback)
+    if (dataGeo.length === 0) {
+        query = `${dataCep.bairro}, ${dataCep.localidade}, ${dataCep.uf}`;
+        resGeo = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`);
+        dataGeo = await resGeo.json();
+    }
+    
+    if (dataGeo.length === 0) throw new Error("Localização exata não encontrada no mapa");
+    
+    return {
+        lat: parseFloat(dataGeo[0].lat),
+        lon: parseFloat(dataGeo[0].lon),
+        logradouro: dataCep.logradouro || "",
+        bairro: dataCep.bairro || ""
+    };
   };
 
+  const getDistanceFromLatLonInKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371; // Raio da terra em KM
+    const dLat = (lat2 - lat1) * (Math.PI / 180);
+    const dLon = (lon2 - lon1) * (Math.PI / 180);
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+  };
+
+  // ==========================================
+  // TABELA DE VALORES DE FRETE
+  // ==========================================
   const obterPrecoFrete = (km: number) => {
-    if (km <= 1.2) return 5.0; // Margem de erro para 1km
-    if (km <= 2.2) return 6.50;
-    if (km <= 3.2) return 8.0;
-    if (km <= 4.2) return 9.50;
-    if (km <= 5.2) return 11.0;
-    if (km <= 6.2) return 12.50;
-    if (km <= 7.2) return 14.0;
-    if (km <= 8.5) return 15.50;
-    return -1;
+    // Usamos Math.ceil para arredondar para cima. Ex: 1.2km vira 2km.
+    const kmArredondado = Math.ceil(km);
+    
+    if (kmArredondado <= 1) return 5.0;
+    if (kmArredondado === 2) return 6.50;
+    if (kmArredondado === 3) return 8.0;
+    if (kmArredondado === 4) return 9.50;
+    if (kmArredondado === 5) return 11.0;
+    if (kmArredondado === 6) return 12.50;
+    if (kmArredondado === 7) return 14.0;
+    if (kmArredondado === 8) return 15.50;
+    
+    return -1; // -1 indica fora da área de cobertura (> 8km)
   };
 
   const handleCepChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     let valor = e.target.value.replace(/\D/g, "");
     if (valor.length > 8) valor = valor.slice(0, 8);
+    
     const formatado = valor.replace(/^(\d{5})(\d)/, "$1-$2");
     setCep(formatado);
 
     if (valor.length === 8) {
       setBuscando(true);
       try {
-        // 1. Busca Endereço (ViaCEP)
-        const resEnd = await fetch(`https://viacep.com.br/ws/${valor}/json/`);
-        const dataEnd = await resEnd.json();
-        
-        if (dataEnd.erro) throw new Error("CEP não existe");
-
-        setRua(dataEnd.logradouro);
-        setBairro(dataEnd.bairro);
-
-        // 2. Busca Coordenadas (Nominatim OpenStreetMap)
-        const resGeo = await fetch(`https://nominatim.openstreetmap.org/search?format=json&postalcode=${valor}&country=Brazil`);
-        const dataGeo = await resGeo.json();
-
-        if (dataGeo.length > 0) {
-          const { lat, lon } = dataGeo[0];
-          const km = calcularDistanciaHaversine(ORIGEM.lat, ORIGEM.lon, parseFloat(lat), parseFloat(lon));
-          const valorFrete = obterPrecoFrete(km);
-
-          if (valorFrete === -1) {
-            alert(`A distância (${km.toFixed(1)}km) está fora do nosso raio de entrega.`);
-            setFrete(0);
-            setDistanciaKm(null);
-          } else {
-            setDistanciaKm(parseFloat(km.toFixed(1)));
-            setFrete(valorFrete);
-            document.getElementById("numero-input")?.focus();
-          }
+        if (!storeCoords) {
+            const originData = await getCoordinates("13520000");
+            storeCoords = { lat: originData.lat, lon: originData.lon };
         }
+
+        const userCoords = await getCoordinates(valor);
+        setRua(userCoords.logradouro);
+        setBairro(userCoords.bairro);
+
+        const distance = getDistanceFromLatLonInKm(storeCoords.lat, storeCoords.lon, userCoords.lat, userCoords.lon);
+        const valorFrete = obterPrecoFrete(distance);
+
+        setDistanciaKm(parseFloat(distance.toFixed(1)));
+
+        // Condição ativada para bloquear fora da zona de entrega
+        if (valorFrete === -1) {
+          setFrete(0);
+          setForaDaZona(true);
+        } else {
+          setFrete(valorFrete);
+          setForaDaZona(false);
+          document.getElementById("numero-input")?.focus();
+        }
+
       } catch (err) {
-        alert("Erro ao localizar CEP. Verifique a conexão.");
+        console.error(err);
+        alert("Não foi possível calcular a distância. Verifique o CEP.");
       } finally {
         setBuscando(false);
       }
@@ -110,7 +148,14 @@ export default function CheckoutForm({ onConfirm, totalItems }: CheckoutFormProp
   };
 
   const handleFinalizar = () => {
-    if (!metodoPagamento) return alert("Selecione a forma de pagamento.");
+    // Bloqueia a mensagem via WhatsApp se estiver fora da área
+    if (foraDaZona) return alert("Endereço fora da zona de entrega. Não é possível enviar o pedido.");
+    
+    if (!cep || !rua || !numero || !bairro) return alert("Preencha todos os campos de endereço.");
+    if (frete === 0 && distanciaKm === null) return alert("Por favor, insira um CEP válido e dentro da área de cobertura.");
+    if (!metodoPagamento) return alert("Selecione uma forma de pagamento.");
+    if (metodoPagamento === "cartao" && !tipoCartao) return alert("Selecione se o cartão é Crédito ou Débito.");
+    
     onConfirm({
       endereco: { cep, rua, numero, complemento, bairro },
       frete,
@@ -119,63 +164,102 @@ export default function CheckoutForm({ onConfirm, totalItems }: CheckoutFormProp
     });
   };
 
-  const inputClass = "w-full bg-[#1e1e1e] border border-white/5 rounded-2xl p-4 text-white text-sm outline-none focus:border-[#e8a838]";
+  const inputClass = "w-full bg-[#1e1e1e] border border-white/5 rounded-2xl p-4 text-white text-sm outline-none focus:border-[#e8a838] transition-colors";
+  const btnClass = "flex-1 p-3 rounded-xl border text-sm font-bold transition-colors";
 
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scroll">
-        <div>
-          <h3 className="text-white/50 text-[10px] font-black uppercase tracking-widest mb-4">📍 Endereço</h3>
-          <div className="space-y-3">
-            <div className="relative">
-              <input type="text" placeholder="Seu CEP" value={cep} onChange={handleCepChange} maxLength={9} className={inputClass} />
-              {buscando && <span className="absolute right-4 top-4 text-[10px] text-[#e8a838] animate-pulse">LOCALIZANDO...</span>}
-            </div>
-            {distanciaKm && (
-              <div className="bg-white/5 p-3 rounded-xl border border-white/10 flex justify-between text-xs font-bold">
-                <span className="text-white/60">Distância aprox: {distanciaKm}km</span>
-                <span className="text-[#e8a838]">Frete: R$ {frete.toFixed(2)}</span>
-              </div>
-            )}
-            <input type="text" placeholder="Rua" value={rua} onChange={e => setRua(e.target.value)} className={inputClass} />
-            <div className="flex gap-3">
-              <input id="numero-input" type="text" placeholder="Nº" value={numero} onChange={e => setNumero(e.target.value)} className={`w-1/3 ${inputClass}`} />
-              <input type="text" placeholder="Compl." value={complemento} onChange={e => setComplemento(e.target.value)} className={`w-2/3 ${inputClass}`} />
-            </div>
-            <input type="text" placeholder="Bairro" value={bairro} onChange={e => setBairro(e.target.value)} className={inputClass} />
+        
+        {/* SESSÃO DE ENDEREÇO */}
+        <div className="space-y-4">
+          <h3 className="text-white/50 text-xs font-black uppercase tracking-widest">Endereço de Entrega</h3>
+          <div className="relative">
+            <input type="text" placeholder="CEP de Destino" value={cep} onChange={handleCepChange} maxLength={9} className={inputClass} />
+            {buscando && <span className="absolute right-4 top-4 text-xs font-bold text-[#e8a838] animate-pulse">A procurar...</span>}
           </div>
+          
+          {distanciaKm !== null && foraDaZona && (
+            <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 flex justify-between items-center text-xs font-bold text-red-500 animate-fade-in">
+              <span>Distância: ~{distanciaKm}km</span>
+              <span>Fora da área de cobertura</span>
+            </div>
+          )}
+
+          {distanciaKm !== null && !foraDaZona && frete > 0 && (
+            <div className="bg-[#e8a838]/10 border border-[#e8a838]/20 rounded-xl p-3 flex justify-between items-center text-xs font-bold text-[#e8a838] animate-fade-in">
+              <span>Distância detectada: ~{distanciaKm}km</span>
+              <span>✓ Frete calculado</span>
+            </div>
+          )}
+
+          <input type="text" placeholder="Rua" value={rua} onChange={(e) => setRua(e.target.value)} className={inputClass} />
+          <div className="flex gap-4">
+            <input id="numero-input" type="text" placeholder="Número" value={numero} onChange={(e) => setNumero(e.target.value)} className={`w-1/3 ${inputClass}`} />
+            <input type="text" placeholder="Complemento" value={complemento} onChange={(e) => setComplemento(e.target.value)} className={`w-2/3 ${inputClass}`} />
+          </div>
+          <input type="text" placeholder="Bairro / Localidade" value={bairro} onChange={(e) => setBairro(e.target.value)} className={inputClass} />
         </div>
 
-        <div>
-          <h3 className="text-white/50 text-[10px] font-black uppercase tracking-widest mb-4">💳 Pagamento</h3>
-          <div className="grid grid-cols-3 gap-2">
-            {["cartao", "pix", "dinheiro"].map(m => (
-              <button key={m} onClick={() => setMetodoPagamento(m as any)} className={`p-3 rounded-xl border text-[10px] font-black uppercase ${metodoPagamento === m ? 'border-[#e8a838] bg-[#e8a838]/10 text-[#e8a838]' : 'border-white/5 bg-[#141414] text-white/40'}`}>
-                {m}
-              </button>
-            ))}
+        <hr className="border-white/5" />
+
+        {/* SESSÃO DE PAGAMENTO */}
+        <div className={`space-y-4 ${foraDaZona ? 'opacity-50 pointer-events-none' : ''}`}>
+          <h3 className="text-white/50 text-xs font-black uppercase tracking-widest">Forma de Pagamento</h3>
+          <div className="flex gap-2">
+            <button onClick={() => setMetodoPagamento("cartao")} className={`${btnClass} ${metodoPagamento === 'cartao' ? 'border-[#e8a838] bg-[#e8a838]/10 text-[#e8a838]' : 'border-white/5 bg-[#1e1e1e] text-white/50'}`}>Cartão</button>
+            <button onClick={() => setMetodoPagamento("pix")} className={`${btnClass} ${metodoPagamento === 'pix' ? 'border-[#e8a838] bg-[#e8a838]/10 text-[#e8a838]' : 'border-white/5 bg-[#1e1e1e] text-white/50'}`}>PIX</button>
+            <button onClick={() => setMetodoPagamento("dinheiro")} className={`${btnClass} ${metodoPagamento === 'dinheiro' ? 'border-[#e8a838] bg-[#e8a838]/10 text-[#e8a838]' : 'border-white/5 bg-[#1e1e1e] text-white/50'}`}>Dinheiro</button>
           </div>
 
           {metodoPagamento === "cartao" && (
-            <div className="flex gap-2 mt-3">
-              <button onClick={() => setTipoCartao("credito")} className={`flex-1 p-2 rounded-lg border text-[10px] ${tipoCartao === 'credito' ? 'border-white text-white' : 'border-white/5 text-white/30'}`}>CRÉDITO</button>
-              <button onClick={() => setTipoCartao("debito")} className={`flex-1 p-2 rounded-lg border text-[10px] ${tipoCartao === 'debito' ? 'border-white text-white' : 'border-white/5 text-white/30'}`}>DÉBITO</button>
+            <div className="flex gap-2 mt-2 animate-fade-in">
+              <button onClick={() => setTipoCartao("credito")} className={`flex-1 p-2 rounded-lg border text-xs font-bold ${tipoCartao === 'credito' ? 'border-white/40 bg-white/10 text-white' : 'border-white/5 bg-transparent text-white/30'}`}>Crédito</button>
+              <button onClick={() => setTipoCartao("debito")} className={`flex-1 p-2 rounded-lg border text-xs font-bold ${tipoCartao === 'debito' ? 'border-white/40 bg-white/10 text-white' : 'border-white/5 bg-transparent text-white/30'}`}>Débito</button>
             </div>
           )}
 
           {metodoPagamento === "dinheiro" && (
-            <input type="text" placeholder="Troco para quanto?" value={trocoPara} onChange={e => setTrocoPara(e.target.value)} className={`${inputClass} mt-3`} />
+            <div className="mt-2 animate-fade-in">
+              <input type="text" placeholder="Precisa de troco para quanto? (Ex: R$ 50)" value={trocoPara} onChange={(e) => setTrocoPara(e.target.value)} className={inputClass} />
+            </div>
           )}
         </div>
+
       </div>
 
-      <div className="p-6 bg-[#141414] border-t border-white/5">
-        <div className="flex justify-between items-center mb-4">
-          <span className="text-white/40 text-xs font-bold uppercase">Total Geral</span>
-          <span className="text-white font-black text-xl">R$ {(totalItems + frete).toFixed(2)}</span>
+      {/* FOOTER TOTAL */}
+      <div className="p-6 border-t border-white/5 bg-[#141414] shrink-0">
+        <div className="flex justify-between items-end mb-2">
+          <span className="text-white/50 text-xs font-bold">Subtotal dos itens</span>
+          <span className="text-white/80">{formatCurrency(totalItems)}</span>
         </div>
-        <button onClick={handleFinalizar} className="w-full h-14 rounded-2xl text-black font-black text-sm uppercase tracking-widest" style={{ backgroundColor: RESTAURANTE.cor }}>
-          Finalizar Pedido
+        <div className="flex justify-between items-end mb-4">
+          <span className="text-white/50 text-xs font-bold">Frete {distanciaKm ? `(${distanciaKm}km)` : ''}</span>
+          
+          {/* MENSAGEM DO FRETE */}
+          <span className={foraDaZona ? "text-red-500 font-bold text-xs" : (frete > 0 ? "text-white/80" : "text-white/30")}>
+            {foraDaZona ? "(Fora da zona de entrega)" : (frete > 0 ? formatCurrency(frete) : "A calcular...")}
+          </span>
+        </div>
+        
+        {/* TOTAL GERAL EM DESTAQUE */}
+        <div className="flex justify-between items-end mb-6 border-t border-white/5 pt-4">
+          <span className="text-[#e8a838] text-sm font-black uppercase tracking-widest">Total Geral</span>
+          <span className="text-[#e8a838] font-black text-2xl">
+            {foraDaZona ? "--" : formatCurrency(totalItems + frete)}
+          </span>
+        </div>
+        
+        {/* BOTÃO FINALIZAR / BLOQUEADO */}
+        <button 
+          onClick={handleFinalizar} 
+          disabled={foraDaZona}
+          className={`w-full h-14 rounded-2xl font-black text-sm uppercase tracking-[0.1em] shadow-xl transition-all 
+            ${foraDaZona ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed opacity-70' : 'text-black active:scale-95'}`}
+          style={{ backgroundColor: foraDaZona ? undefined : RESTAURANTE.cor }}
+        >
+          {foraDaZona ? "Entrega Indisponível" : "Finalizar Pedido"}
         </button>
       </div>
     </div>
