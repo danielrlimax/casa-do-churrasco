@@ -52,21 +52,36 @@ export default function CheckoutForm({ onConfirm, totalItems }: CheckoutFormProp
     const resViaCep = await fetch(`https://viacep.com.br/ws/${cepBusca}/json/`);
     const dataCep = await resViaCep.json();
     
-    if (dataCep.erro) throw new Error("CEP não encontrado");
+    if (dataCep.erro) throw new Error("CEP_NAO_ENCONTRADO");
 
-    // TENTATIVA 1: Busca pela Rua, Cidade, Estado
-    let query = `${dataCep.logradouro}, ${dataCep.localidade}, ${dataCep.uf}`;
-    let resGeo = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`);
-    let dataGeo = await resGeo.json();
-    
-    // TENTATIVA 2: Busca por Bairro, Cidade, Estado (Fallback)
-    if (dataGeo.length === 0) {
-        query = `${dataCep.bairro}, ${dataCep.localidade}, ${dataCep.uf}`;
+    let dataGeo = [];
+
+    // TENTATIVA 1: Busca direta pelo CEP no Nominatim
+    let resGeo = await fetch(`https://nominatim.openstreetmap.org/search?format=json&postalcode=${cepBusca}&country=Brazil`);
+    dataGeo = await resGeo.json();
+
+    // TENTATIVA 2: Busca por Rua, Cidade, Estado
+    if (dataGeo.length === 0 && dataCep.logradouro) {
+        let query = `${dataCep.logradouro}, ${dataCep.localidade}, ${dataCep.uf}`;
         resGeo = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`);
         dataGeo = await resGeo.json();
     }
     
-    if (dataGeo.length === 0) throw new Error("Localização exata não encontrada no mapa");
+    // TENTATIVA 3: Busca por Bairro, Cidade, Estado
+    if (dataGeo.length === 0 && dataCep.bairro) {
+        let query = `${dataCep.bairro}, ${dataCep.localidade}, ${dataCep.uf}`;
+        resGeo = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`);
+        dataGeo = await resGeo.json();
+    }
+
+    // TENTATIVA 4 (Fallback Final): Apenas Cidade e Estado (Garante que CEPs distantes sejam localizados)
+    if (dataGeo.length === 0) {
+        let query = `${dataCep.localidade}, ${dataCep.uf}`;
+        resGeo = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`);
+        dataGeo = await resGeo.json();
+    }
+    
+    if (dataGeo.length === 0) throw new Error("COORDENADAS_NAO_ENCONTRADAS");
     
     return {
         lat: parseFloat(dataGeo[0].lat),
@@ -89,7 +104,6 @@ export default function CheckoutForm({ onConfirm, totalItems }: CheckoutFormProp
   // TABELA DE VALORES DE FRETE
   // ==========================================
   const obterPrecoFrete = (km: number) => {
-    // Usamos Math.ceil para arredondar para cima. Ex: 1.2km vira 2km.
     const kmArredondado = Math.ceil(km);
     
     if (kmArredondado <= 1) return 5.0;
@@ -113,6 +127,9 @@ export default function CheckoutForm({ onConfirm, totalItems }: CheckoutFormProp
 
     if (valor.length === 8) {
       setBuscando(true);
+      setForaDaZona(false); // Reseta o estado antes de buscar
+      setDistanciaKm(null);
+      
       try {
         if (!storeCoords) {
             const originData = await getCoordinates("13520000");
@@ -128,7 +145,7 @@ export default function CheckoutForm({ onConfirm, totalItems }: CheckoutFormProp
 
         setDistanciaKm(parseFloat(distance.toFixed(1)));
 
-        // Condição ativada para bloquear fora da zona de entrega
+        // Condição ativada para bloquear fora da zona de entrega (> 8km)
         if (valorFrete === -1) {
           setFrete(0);
           setForaDaZona(true);
@@ -138,9 +155,15 @@ export default function CheckoutForm({ onConfirm, totalItems }: CheckoutFormProp
           document.getElementById("numero-input")?.focus();
         }
 
-      } catch (err) {
-        console.error(err);
-        alert("Não foi possível calcular a distância. Verifique o CEP.");
+      } catch (err: any) {
+        if (err.message === "CEP_NAO_ENCONTRADO") {
+            alert("O CEP digitado não existe. Verifique e tente novamente.");
+        } else {
+            alert("Tivemos um problema para localizar esse endereço no mapa.");
+        }
+        setFrete(0);
+        setDistanciaKm(null);
+        setForaDaZona(true); // Se der erro catastrófico, impede a venda para evitar entrega sem frete
       } finally {
         setBuscando(false);
       }
@@ -148,7 +171,6 @@ export default function CheckoutForm({ onConfirm, totalItems }: CheckoutFormProp
   };
 
   const handleFinalizar = () => {
-    // Bloqueia a mensagem via WhatsApp se estiver fora da área
     if (foraDaZona) return alert("Endereço fora da zona de entrega. Não é possível enviar o pedido.");
     
     if (!cep || !rua || !numero || !bairro) return alert("Preencha todos os campos de endereço.");
@@ -176,7 +198,7 @@ export default function CheckoutForm({ onConfirm, totalItems }: CheckoutFormProp
           <h3 className="text-white/50 text-xs font-black uppercase tracking-widest">Endereço de Entrega</h3>
           <div className="relative">
             <input type="text" placeholder="CEP de Destino" value={cep} onChange={handleCepChange} maxLength={9} className={inputClass} />
-            {buscando && <span className="absolute right-4 top-4 text-xs font-bold text-[#e8a838] animate-pulse">A procurar...</span>}
+            {buscando && <span className="absolute right-4 top-4 text-xs font-bold text-[#e8a838] animate-pulse">Calculando...</span>}
           </div>
           
           {distanciaKm !== null && foraDaZona && (
@@ -237,7 +259,6 @@ export default function CheckoutForm({ onConfirm, totalItems }: CheckoutFormProp
         <div className="flex justify-between items-end mb-4">
           <span className="text-white/50 text-xs font-bold">Frete {distanciaKm ? `(${distanciaKm}km)` : ''}</span>
           
-          {/* MENSAGEM DO FRETE */}
           <span className={foraDaZona ? "text-red-500 font-bold text-xs" : (frete > 0 ? "text-white/80" : "text-white/30")}>
             {foraDaZona ? "(Fora da zona de entrega)" : (frete > 0 ? formatCurrency(frete) : "A calcular...")}
           </span>
