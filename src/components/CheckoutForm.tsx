@@ -107,13 +107,13 @@ export default function CheckoutForm({ onConfirm, totalItems }: CheckoutFormProp
     const kmArredondado = Math.ceil(km);
     
     if (kmArredondado <= 1) return 5.0;
-    if (kmArredondado === 2) return 6.50;
-    if (kmArredondado === 3) return 8.0;
-    if (kmArredondado === 4) return 9.50;
-    if (kmArredondado === 5) return 11.0;
-    if (kmArredondado === 6) return 12.50;
-    if (kmArredondado === 7) return 14.0;
-    if (kmArredondado === 8) return 15.50;
+    if (kmArredondado === 2) return 5.0;
+    if (kmArredondado === 3) return 6.5;
+    if (kmArredondado === 4) return 8.0;
+    if (kmArredondado === 5) return 9.5;
+    if (kmArredondado === 6) return 11.0;
+    if (kmArredondado === 7) return 12.50;
+    if (kmArredondado === 8) return 14;
     
     return -1; // -1 indica fora da área de cobertura (> 8km)
   };
